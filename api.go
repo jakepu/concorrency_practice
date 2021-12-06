@@ -1,7 +1,7 @@
 package main
 
 const (
-	Deposit int = 0
+	Deposit int = iota
 	Balance
 	Withdraw
 	Commit
@@ -9,12 +9,13 @@ const (
 )
 
 const (
-	AccountNotExist int = 0
-	Success
+	Success int = iota
+	AccountNotExist
+	Unknown
 )
 
 type Request struct {
-	Operation     string
+	Operation     int
 	Account       string
 	Amount        int
 	ReadLockHeld  []string
@@ -23,4 +24,5 @@ type Request struct {
 
 type Response struct {
 	status int
+	Amount int
 }
