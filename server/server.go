@@ -108,6 +108,7 @@ func handleRequest(req Request) Response {
 		acct, found := acctMap[req.Account]
 		if !found {
 			acct = &account{balance: req.Amount, writeLockOwner: req.ClientId}
+			acctMap[req.Account] = acct
 		} else {
 			requestWL(acct, req.ClientId)
 			acct.balance += req.Amount
