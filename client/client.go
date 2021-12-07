@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -21,6 +22,31 @@ func main() {
 
 var transactionState map[string]map[string]int
 
+// wait for response from server or ABORT from stdin
+func sendRequestAndWait(serverName string, msg Request) {
+	encoder := json.NewEncoder(serverConnPool[serverName])
+	err := encoder.Encode(msg)
+	// msgSerialized, err := json.Marshal(msg)
+	// msgSerializedText := string(msgSerialized) + "\n"
+	if err != nil {
+		panic("Cannot encode the request msg.")
+	}
+	// fmt.Fprint(serverConnPool[serverName], msgSerializedText)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func(ctx context.Context) {
+
+	}(ctx)
+
+	decoder := json.NewDecoder(serverConnPool[serverName])
+	var replyMsg Response
+	err = decoder.Decode(&replyMsg)
+	if err != nil {
+		panic("Failed to receive and decode json")
+	}
+}
+
 func processTransactions() {
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Split(bufio.ScanLines)
@@ -32,6 +58,7 @@ func processTransactions() {
 		if operation == "BEGIN" {
 			hasBegun = true
 			transactionState = make(map[string]map[string]int)
+			fmt.Println("OK")
 			continue
 		}
 		if !hasBegun {
@@ -58,35 +85,27 @@ func processTransactions() {
 			msg.Operation = Deposit
 			msg.Account = account
 			msg.Amount = amount
+			sendRequestAndWait(serverName, msg)
 		case "BALANCE":
 			msg.Operation = Balance
 			msg.Account = account
+			sendRequestAndWait(serverName, msg)
 		case "WITHDRAW":
 			msg.Operation = Withdraw
 			msg.Account = account
 			msg.Amount = amount
+			sendRequestAndWait(serverName, msg)
 		case "COMMIT":
-			hasBegun = false
+			msg.Operation = Commit
+			sendRequestAndWait(serverName, msg)
 		}
-		encoder := json.NewEncoder(serverConnPool[serverName])
-		err := encoder.Encode(msg)
-		// msgSerialized, err := json.Marshal(msg)
-		// msgSerializedText := string(msgSerialized) + "\n"
-		if err != nil {
-			panic("Cannot encode the request msg.")
-		}
-		// fmt.Fprint(serverConnPool[serverName], msgSerializedText)
-		decoder := json.NewDecoder(serverConnPool[serverName])
-		var replyMsg Response
-		err = decoder.Decode(&replyMsg)
-		if err != nil {
-			panic("Failed to receive and decode json")
-		}
+
 		switch replyMsg.Status {
 		case Success:
-			fmt.Println("Success")
+			fmt.Println("OK")
 		case AccountNotExist:
-			fmt.Println("Account not exist")
+			fmt.Println("NOT FOUND, ABORTED")
+			hasBegun = false
 		}
 
 	}
@@ -135,7 +154,6 @@ func configAndConnectServers() {
 			panic(errStr)
 		}
 		serverConnPool[serverName] = conn
-		fmt.Println(serverName)
 	}
 
 	file.Close()

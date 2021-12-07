@@ -1,18 +1,19 @@
 package main
 
 const (
+	// client action
 	Deposit int = iota
 	Balance
 	Withdraw
 	Commit
 	Abort
-)
-
-const (
-	Success int = iota
+	// server status
+	Success
 	AccountNotExist
 	Unknown
 )
+
+const ()
 
 type Request struct {
 	Operation     int
