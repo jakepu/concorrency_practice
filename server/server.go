@@ -25,7 +25,7 @@ var acctMap map[string]*account // accountId -> account. store all account infor
 func main() {
 	port := processConfigFile()
 	// listen on port on localhost
-	fmt.Println(port)
+	//fmt.Println(port)
 	ln, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Fatal("Cannot listen on port", err.Error())
@@ -33,7 +33,7 @@ func main() {
 	}
 	defer ln.Close()
 
-	fmt.Println(ln.Addr())
+	//fmt.Println(ln.Addr())
 	// continuous handle all incoming message till ctrl+c
 	for {
 		// accept connection
@@ -92,6 +92,7 @@ func eventLoop(conn net.Conn) {
 		encoder := json.NewEncoder(conn)
 		err = encoder.Encode(resp)
 		if err != nil {
+			fmt.Println(err)
 			panic("Cannot encode the request msg.")
 		}
 	}
