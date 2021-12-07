@@ -21,7 +21,7 @@ type Request struct {
 	Account      string
 	Amount       int
 	ReadLockHeld []string
-	Values       map[string]map[string]int // example: Values[Server][Account] is balance
+	Values       map[string]int
 	ClientId     string
 }
 

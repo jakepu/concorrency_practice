@@ -18,7 +18,7 @@ var scanner *bufio.Scanner // stdin scanner
 type transactionState struct {
 	currValues   map[string]map[string]int
 	backupValues map[string]map[string]int
-	serverName   []string
+	serverNames  map[string]bool
 }
 
 var currState transactionState
@@ -38,26 +38,39 @@ func sendRequest(serverName string, msg Request) {
 	}
 	// fmt.Fprint(serverConnPool[serverName], msgSerializedText)
 }
-func sendRequestAndGetResponse(serverName string, msg Request, responseChan chan<- Response) {
-	sendRequest(serverName, msg)
+
+func getResponse(serverName string) Response {
 	decoder := json.NewDecoder(serverConnPool[serverName])
 	var replyMsg Response
 	err := decoder.Decode(&replyMsg)
 	if err != nil {
 		panic("Failed to receive and decode json")
 	}
-	printResponse(replyMsg)
+	return replyMsg
+}
+
+func sendRequestAndGetResponse(serverName string, req Request, responseChan chan<- Response) {
+	sendRequest(serverName, req)
+	replyMsg := getResponse(serverName)
+	printResponse(serverName, req, replyMsg)
 	responseChan <- replyMsg
 
 }
+
 func initTransactionState() {
 	hasBegun = false
 	currState = transactionState{}
 }
-func printResponse(resp Response) {
+
+func printResponse(serverName string, req Request, resp Response) {
 	switch resp.Status {
 	case Success:
-		fmt.Println("OK")
+		if req.Operation == Balance {
+			fmt.Printf("%s.%s = %d\n", serverName, req.Account, resp.Amount)
+		} else {
+			fmt.Println("OK")
+		}
+
 	case AccountNotExist:
 		fmt.Println("NOT FOUND, ABORTED")
 	case Aborted:
@@ -66,6 +79,18 @@ func printResponse(resp Response) {
 		panic("Received status 'Unknown' from server")
 	}
 }
+
+func isCurrBalancesValid() bool {
+	for _, accountMap := range currState.currValues {
+		for _, value := range accountMap {
+			if value < 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func processResponse(operation int, serverName string, account string, amount int, resp Response) {
 	if _, found := currState.currValues[serverName]; !found {
 		currState.currValues[serverName] = make(map[string]int)
@@ -86,7 +111,9 @@ func processResponse(operation int, serverName string, account string, amount in
 		}
 	}
 	currState.currValues[serverName][account] = resp.Amount
+	currState.serverNames[serverName] = true
 }
+
 func processTransactions() {
 	shouldScan := true
 	var lineBuf string
@@ -191,8 +218,24 @@ func processTransactions() {
 			resp := <-responseChan
 			processResponse(Withdraw, serverName, account, amount, resp)
 		case "COMMIT":
-			msg.Operation = Commit
-			checkCurrBalances()
+			if isCurrBalancesValid() {
+				msg.Operation = Commit
+				for server := range currState.serverNames {
+					msg.Values = currState.currValues[server]
+					sendRequest(server, msg)
+					getResponse(server)
+				}
+				fmt.Println("COMMIT OK")
+			} else {
+				msg.Operation = Abort
+				for server := range currState.serverNames {
+					msg.Values = currState.backupValues[server]
+					sendRequest(server, msg)
+					getResponse(server)
+				}
+				fmt.Println("ABORTED")
+			}
+			shouldScan = true
 		}
 
 	}
