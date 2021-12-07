@@ -21,7 +21,7 @@ type account struct {
 
 // global variable for server instance
 var acctMap map[string]*account         // accountId -> account. store all account information, using map for quicker lookup.
-var clientLockMap map[string][]*account // clientId -> account. store a list of lock that client holds. used for releasing locks
+var clientLockMap map[string][]*account // clientId -> account. store a list of read/write lock that client holds. used for releasing locks when user commit or abort
 
 func main() {
 	acctMap = make(map[string]*account)
@@ -29,7 +29,6 @@ func main() {
 
 	port := processConfigFile()
 	// listen on port on localhost
-	//fmt.Println(port)
 	ln, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Fatal("Cannot listen on port", err.Error())
@@ -37,7 +36,6 @@ func main() {
 	}
 	defer ln.Close()
 
-	//fmt.Println(ln.Addr())
 	// continuous handle all incoming message till ctrl+c
 	for {
 		// accept connection
@@ -47,7 +45,8 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Println(conn.RemoteAddr())
+		// for debug
+		//fmt.Println(conn.RemoteAddr())
 		//fmt.Println(conn.LocalAddr())
 		// handle request in a goroutine.
 		go eventLoop(conn)
@@ -81,11 +80,12 @@ func processConfigFile() string {
 	return ""
 }
 
+// each connection from clients will be handled in separate gorouting
 func eventLoop(conn net.Conn) {
 	defer conn.Close()
 
 	for {
-		// process incoming message
+		// receiving request message
 		var req Request
 		decoder := json.NewDecoder(conn)
 		err := decoder.Decode(&req)
@@ -93,8 +93,9 @@ func eventLoop(conn net.Conn) {
 			return
 		}
 		fmt.Print(req.ClientId, ",", req.Operation, ",", req.Account, "|")
+		// processing request message and generating response message
 		resp := handleRequest(req)
-		// sending reply message
+		// sending response message
 		encoder := json.NewEncoder(conn)
 		err = encoder.Encode(resp)
 		if err != nil {
@@ -109,6 +110,7 @@ func handleRequest(req Request) Response {
 	case Deposit:
 		acct, found := acctMap[req.Account]
 		if !found {
+			// create a new account and assign the write lock to the client
 			acct = &account{balance: req.Amount, writeLockOwner: req.ClientId}
 			acctMap[req.Account] = acct
 		} else {
@@ -116,10 +118,12 @@ func handleRequest(req Request) Response {
 			acct.balance += req.Amount
 		}
 		updateClientLockMap(req.ClientId, acct)
-		fmt.Print(", balance:", acct.balance, ", ")
-		printLock(acct)
 		resp.Status = Success
 		resp.Amount = acct.balance
+
+		// for debug
+		fmt.Print(", balance:", acct.balance, ", ")
+		printLock(acct)
 	case Balance:
 		acct, found := acctMap[req.Account]
 		if !found {
@@ -129,6 +133,8 @@ func handleRequest(req Request) Response {
 			updateClientLockMap(req.ClientId, acct)
 			resp.Status = Success
 			resp.Amount = acct.balance
+
+			// for debug
 			fmt.Print(", balance:", acct.balance, ", ")
 			printLock(acct)
 		}
@@ -138,20 +144,23 @@ func handleRequest(req Request) Response {
 			resp.Status = AccountNotExist
 		} else {
 			requestWL(acct, req.ClientId)
-			updateClientLockMap(req.ClientId, acct)
 			acct.balance -= req.Amount
+			updateClientLockMap(req.ClientId, acct)
 			resp.Status = Success
 			resp.Amount = acct.balance
+
+			// for debug
 			fmt.Print(", balance:", acct.balance, ", ")
 			printLock(acct)
 		}
 	case Commit:
-		// TODO: set all new created acct to be established
+		confirmNewValues(req.Values)
 		releaseAllLock(req.ClientId)
-		delete(clientLockMap, req.ClientId)
 		resp.Status = Success
 	case Abort:
-
+		resetToOldValues(req.Values)
+		releaseAllLock(req.ClientId)
+		resp.Status = Aborted
 	}
 
 	return resp
@@ -202,6 +211,7 @@ func requestWL(acct *account, clientId string) {
 }
 
 func releaseAllLock(clientId string) {
+	// for debug
 	defer fmt.Println(clientId, " release clock")
 
 	l := clientLockMap[clientId]
@@ -218,6 +228,8 @@ func releaseAllLock(clientId string) {
 			}
 		}
 	}
+
+	delete(clientLockMap, clientId)
 }
 
 func updateClientLockMap(clientId string, acct *account) {
@@ -227,7 +239,7 @@ func updateClientLockMap(clientId string, acct *account) {
 		clientLockMap[clientId] = l
 	}
 
-	// check if the acct is already in the slice
+	// check if the this client already has the lock
 	for _, v := range l {
 		if v == acct {
 			return
@@ -237,6 +249,26 @@ func updateClientLockMap(clientId string, acct *account) {
 	clientLockMap[clientId] = append(l, acct)
 }
 
+func confirmNewValues(newValues map[string]int) {
+	// set all accounts to be established
+	for acct := range newValues {
+		acctMap[acct].established = true
+	}
+}
+
+func resetToOldValues(oldValues map[string]int) {
+	for acct, initValue := range oldValues {
+		if acctMap[acct].established {
+			// reset modified account to old value
+			acctMap[acct].balance = initValue
+		} else {
+			// remove new created account
+			delete(acctMap, acct)
+		}
+	}
+}
+
+// for debug
 func printLock(acct *account) {
 	fmt.Print("lock: ")
 	for e := acct.readLockOwner.Front(); e != nil; e = e.Next() {
