@@ -2,14 +2,16 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 )
 
 var nodeId string
-var isBegin bool
+var hasBegun bool
 var serverConnPool map[string]net.Conn
 
 const (
@@ -26,15 +28,62 @@ func processTransactions() {
 	scanner.Split(bufio.ScanLines)
 	for {
 		scanner.Scan()
-		line := strings.Split(scanner.Text(), " ")
+		oneLine := scanner.Text()
+		line := strings.Split(oneLine, " ")
 		operation := line[0]
+		if operation == "BEGIN" {
+			hasBegun = true
+			continue
+		}
+		if !hasBegun {
+			continue
+		}
 		var serverName string
 		var account string
-		target := line[1]
-		amount := line[2]
-		switch operation {
-
+		var target string
+		var amount int
+		if len(line) > 1 {
+			fmt.Sscanf(target, "%s.%s", &serverName, &account)
+			target = line[1]
+			if len(line) > 2 {
+				amount, _ = strconv.Atoi(line[2])
+			}
 		}
+
+		var msg Request
+		switch operation {
+		case "DEPOSIT":
+			msg.Operation = Deposit
+			msg.Account = account
+			msg.Amount = amount
+		case "BALANCE":
+			msg.Operation = Balance
+			msg.Account = account
+		case "WITHDRAW":
+			msg.Operation = Withdraw
+			msg.Account = account
+			msg.Amount = amount
+		case "COMMIT":
+			hasBegun = false
+		}
+		encoder := json.NewEncoder(serverConnPool[serverName])
+		err := encoder.Encode(msg)
+		if err != nil {
+			panic("Cannot encode the request msg.")
+		}
+		decoder := json.NewDecoder(serverConnPool[serverName])
+		var replyMsg Response
+		err = decoder.Decode(&replyMsg)
+		if err != nil {
+			panic("Failed to receive and decode json")
+		}
+		switch replyMsg.Status {
+		case Success:
+			fmt.Print("Success")
+		case AccountNotExist:
+			fmt.Print("Account not exist")
+		}
+
 	}
 }
 

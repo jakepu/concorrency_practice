@@ -20,9 +20,10 @@ type Request struct {
 	Amount        int
 	ReadLockHeld  []string
 	UpdatedValues map[string]int
+	ClientId      string
 }
 
 type Response struct {
-	status int
+	Status int
 	Amount int
 }
