@@ -35,6 +35,7 @@ func main() {
 	// continuous handle all incoming message till ctrl+c
 	for {
 		// accept connection
+		fmt.Println("accept here")
 		conn, err := ln.Accept()
 		if err != nil {
 			log.Fatal("Cannot accept incoming connection: ", err.Error())

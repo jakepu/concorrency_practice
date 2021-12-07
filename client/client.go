@@ -23,6 +23,8 @@ func main() {
 	go processTransactions()
 }
 
+var transactionState map[string]map[string]int
+
 func processTransactions() {
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Split(bufio.ScanLines)
@@ -33,6 +35,7 @@ func processTransactions() {
 		operation := line[0]
 		if operation == "BEGIN" {
 			hasBegun = true
+			transactionState = make(map[string]map[string]int)
 			continue
 		}
 		if !hasBegun {
@@ -43,14 +46,15 @@ func processTransactions() {
 		var target string
 		var amount int
 		if len(line) > 1 {
-			fmt.Sscanf(target, "%s.%s", &serverName, &account)
 			target = line[1]
+			fmt.Sscanf(target, "%s.%s", &serverName, &account)
 			if len(line) > 2 {
 				amount, _ = strconv.Atoi(line[2])
 			}
 		}
 
 		var msg Request
+		msg.ClientId = nodeId
 		switch operation {
 		case "DEPOSIT":
 			msg.Operation = Deposit
