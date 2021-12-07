@@ -68,14 +68,14 @@ func processTransactions() {
 		case "COMMIT":
 			hasBegun = false
 		}
-		// encoder := json.NewEncoder(serverConnPool[serverName])
-		// err := encoder.Encode(msg)
-		msgSerialized, err := json.Marshal(msg)
-		msgSerializedText := string(msgSerialized) + "\n"
+		encoder := json.NewEncoder(serverConnPool[serverName])
+		err := encoder.Encode(msg)
+		// msgSerialized, err := json.Marshal(msg)
+		// msgSerializedText := string(msgSerialized) + "\n"
 		if err != nil {
 			panic("Cannot encode the request msg.")
 		}
-		fmt.Fprint(serverConnPool[serverName], msgSerializedText)
+		// fmt.Fprint(serverConnPool[serverName], msgSerializedText)
 		decoder := json.NewDecoder(serverConnPool[serverName])
 		var replyMsg Response
 		err = decoder.Decode(&replyMsg)

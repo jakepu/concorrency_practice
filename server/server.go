@@ -82,24 +82,30 @@ func processConfigFile() string {
 func eventLoop(conn net.Conn) {
 	defer conn.Close()
 
-	scanner := bufio.NewScanner(conn)
+	// scanner := bufio.NewScanner(conn)
 
-	for scanner.Scan() {
+	for {
 		// process incoming message
 
-		req := Request{}
-		incoming := []byte(scanner.Text())
-		err := json.Unmarshal(incoming, &req)
-
+		var req Request
+		// req := Request{}
+		// incoming := []byte(scanner.Text())
+		// err := json.Unmarshal(incoming, &req)
+		decoder := json.NewDecoder(conn)
+		err := decoder.Decode(&req)
 		if err != nil {
-			fmt.Println(err)
+			return
 		}
 
 		resp := handleRequest(req)
-		outgoing, _ := json.Marshal(resp)
-
+		// outgoing, _ := json.Marshal(resp)
+		encoder := json.NewEncoder(conn)
+		err = encoder.Encode(resp)
+		if err != nil {
+			return
+		}
 		// sending reply message
-		fmt.Fprint(conn, string(outgoing)+"\n")
+		// fmt.Fprint(conn, string(outgoing)+"\n")
 	}
 }
 
