@@ -175,7 +175,7 @@ func processTransactions() {
 			lineBuf = scanner.Text()
 			switch lineBuf {
 			case "ABORT":
-				msg.Operation = Abort
+				msg.Operation = PreAbort
 				sendRequest(serverName, msg)
 				fmt.Println("ABORTED")
 				shouldScan = true
@@ -184,7 +184,10 @@ func processTransactions() {
 			}
 			resp := <-responseChan
 			processResponse(Deposit, serverName, account, amount, resp, &shouldScan, &lineBuf)
-			if msg.Operation == Abort && resp.Status != Aborted {
+			for account, val := range currState.backupValues[serverName] {
+				fmt.Printf("Server %s Account %s val %d\n", serverName, account, val)
+			}
+			if msg.Operation == PreAbort && resp.Status != Aborted {
 				resp = getResponse(serverName)
 				processResponse(Deposit, serverName, account, amount, resp, &shouldScan, &lineBuf)
 			}
@@ -198,8 +201,7 @@ func processTransactions() {
 			lineBuf = scanner.Text()
 			switch lineBuf {
 			case "ABORT":
-				msg.Operation = Abort
-				msg.Values = currState.backupValues[serverName]
+				msg.Operation = PreAbort
 				sendRequest(serverName, msg)
 				fmt.Println("ABORTED")
 				shouldScan = true
@@ -208,7 +210,7 @@ func processTransactions() {
 			}
 			resp := <-responseChan
 			processResponse(Balance, serverName, account, 0, resp, &shouldScan, &lineBuf)
-			if msg.Operation == Abort && resp.Status != Aborted {
+			if msg.Operation == PreAbort && resp.Status != Aborted {
 				resp = getResponse(serverName)
 				processResponse(Balance, serverName, account, 0, resp, &shouldScan, &lineBuf)
 			}
@@ -223,8 +225,7 @@ func processTransactions() {
 			lineBuf = scanner.Text()
 			switch lineBuf {
 			case "ABORT":
-				msg.Operation = Abort
-				msg.Values = currState.backupValues[serverName]
+				msg.Operation = PreAbort
 				sendRequest(serverName, msg)
 				fmt.Println("ABORTED")
 				shouldScan = true
@@ -233,7 +234,7 @@ func processTransactions() {
 			}
 			resp := <-responseChan
 			processResponse(Withdraw, serverName, account, amount, resp, &shouldScan, &lineBuf)
-			if msg.Operation == Abort && resp.Status != Aborted {
+			if msg.Operation == PreAbort && resp.Status != Aborted {
 				resp = getResponse(serverName)
 				processResponse(Withdraw, serverName, account, amount, resp, &shouldScan, &lineBuf)
 			}

@@ -6,6 +6,7 @@ const (
 	Balance
 	Withdraw
 	Commit
+	PreAbort // what a hack
 	Abort
 	// server status
 	Success
