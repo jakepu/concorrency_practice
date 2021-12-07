@@ -314,5 +314,5 @@ func printLock(acct *account) {
 		fmt.Print(e.Value, ",")
 	}
 	fmt.Print("|")
-	fmt.Println(acct.writeLockOwner)
+	fmt.Print(acct.writeLockOwner)
 }
