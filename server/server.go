@@ -25,6 +25,7 @@ var acctMap map[string]*account // accountId -> account. store all account infor
 func main() {
 	port := processConfigFile()
 	// listen on port on localhost
+	fmt.Println(port)
 	ln, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Fatal("Cannot listen on port", err.Error())
@@ -32,16 +33,18 @@ func main() {
 	}
 	defer ln.Close()
 
+	fmt.Println(ln.Addr())
 	// continuous handle all incoming message till ctrl+c
 	for {
 		// accept connection
-		fmt.Println("accept here")
 		conn, err := ln.Accept()
 		if err != nil {
 			log.Fatal("Cannot accept incoming connection: ", err.Error())
 			os.Exit(1)
 		}
 
+		//fmt.Println(conn.RemoteAddr())
+		//fmt.Println(conn.LocalAddr())
 		// handle request in a goroutine.
 		go eventLoop(conn)
 	}
@@ -61,15 +64,16 @@ func processConfigFile() string {
 
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
-	file.Close()
 
 	for scanner.Scan() {
 		config := strings.Split(scanner.Text(), " ")
 		if config[0] == serverId {
+			file.Close()
 			return config[2]
 		}
 	}
 
+	file.Close()
 	return ""
 }
 
