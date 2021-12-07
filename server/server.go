@@ -20,10 +20,12 @@ type account struct {
 }
 
 // global variable for server instance
-var acctMap map[string]*account // accountId -> account. store all account information, using map for quicker lookup.
+var acctMap map[string]*account         // accountId -> account. store all account information, using map for quicker lookup.
+var clientLockMap map[string][]*account // clientId -> account. store a list of lock that client holds. used for releasing locks
 
 func main() {
 	acctMap = make(map[string]*account)
+	clientLockMap = make(map[string][]*account)
 
 	port := processConfigFile()
 	// listen on port on localhost
@@ -45,7 +47,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		//fmt.Println(conn.RemoteAddr())
+		fmt.Println(conn.RemoteAddr())
 		//fmt.Println(conn.LocalAddr())
 		// handle request in a goroutine.
 		go eventLoop(conn)
@@ -98,6 +100,7 @@ func eventLoop(conn net.Conn) {
 		}
 
 		resp := handleRequest(req)
+		fmt.Println(resp.Status, resp.Amount)
 		// outgoing, _ := json.Marshal(resp)
 		encoder := json.NewEncoder(conn)
 		err = encoder.Encode(resp)
@@ -121,6 +124,7 @@ func handleRequest(req Request) Response {
 			requestWL(acct, req.ClientId)
 			acct.balance += req.Amount
 		}
+		updateClientLockMap(req.ClientId, acct)
 		resp.Status = Success
 	case Balance:
 		acct, found := acctMap[req.Account]
@@ -128,6 +132,7 @@ func handleRequest(req Request) Response {
 			resp.Status = AccountNotExist
 		} else {
 			requestRL(acct, req.ClientId)
+			updateClientLockMap(req.ClientId, acct)
 			resp.Status = Success
 			resp.Amount = acct.balance
 		}
@@ -137,22 +142,19 @@ func handleRequest(req Request) Response {
 			resp.Status = AccountNotExist
 		} else {
 			requestWL(acct, req.ClientId)
+			updateClientLockMap(req.ClientId, acct)
 			acct.balance -= req.Amount
 		}
 	case Commit:
-		acct, found := acctMap[req.Account]
-		if !found {
-			resp.Status = AccountNotExist
-		} else {
-			releaseAllLock(acct, req.ClientId)
-			resp.Status = Success
-		}
+		releaseAllLock(req.ClientId)
+		resp.Status = Success
 	}
 
 	return resp
 }
 
 func requestRL(acct *account, clientId string) {
+	defer fmt.Println(acct.readLockOwner)
 	for {
 		// check if client already has write lock
 		if acct.writeLockOwner == clientId {
@@ -175,6 +177,7 @@ func requestRL(acct *account, clientId string) {
 }
 
 func requestWL(acct *account, clientId string) {
+	defer fmt.Println(acct.writeLockOwner)
 	// check if client already has write lock
 	if acct.writeLockOwner == clientId {
 		return
@@ -194,16 +197,36 @@ func requestWL(acct *account, clientId string) {
 	time.Sleep(time.Millisecond * 500)
 }
 
-func releaseAllLock(acct *account, clientId string) {
-	if acct.writeLockOwner == clientId {
-		acct.writeLockOwner = ""
-		return
+func releaseAllLock(clientId string) {
+	l := clientLockMap[clientId]
+	for _, v := range l {
+		if v.writeLockOwner == clientId {
+			v.writeLockOwner = ""
+			continue
+		}
+
+		for e := v.readLockOwner.Front(); e != nil; e = e.Next() {
+			if e.Value == clientId {
+				v.readLockOwner.Remove(e)
+				return
+			}
+		}
+	}
+}
+
+func updateClientLockMap(clientId string, acct *account) {
+	l, found := clientLockMap[clientId]
+	if !found {
+		l = make([]*account, 0)
+		clientLockMap[clientId] = l
 	}
 
-	for e := acct.readLockOwner.Front(); e != nil; e = e.Next() {
-		if e.Value == clientId {
-			acct.readLockOwner.Remove(e)
+	// check if the acct is already in the slice
+	for _, v := range l {
+		if v == acct {
 			return
 		}
 	}
+
+	clientLockMap[clientId] = append(l, acct)
 }
