@@ -84,7 +84,11 @@ func eventLoop(conn net.Conn) {
 		}
 
 		resp := handleRequest(req)
-
+		encoder := json.NewEncoder(conn)
+		err = encoder.Encode(resp)
+		if err != nil {
+			panic("Cannot encode the request msg.")
+		}
 	}
 }
 
@@ -94,36 +98,36 @@ func handleRequest(req Request) Response {
 	case Deposit:
 		acct, found := acctMap[req.Account]
 		if !found {
-			acct = &account{balance: req.Amount, writeLockOwner: req.clientId}
+			acct = &account{balance: req.Amount, writeLockOwner: req.ClientId}
 		} else {
-			requestWL(acct, req.clientId)
+			requestWL(acct, req.ClientId)
 			acct.balance += req.Amount
 		}
-		resp.status = Success
+		resp.Status = Success
 	case Balance:
 		acct, found := acctMap[req.Account]
 		if !found {
-			resp.status = AccountNotExist
+			resp.Status = AccountNotExist
 		} else {
-			requestRL(acct, req.clientId)
-			resp.status = Success
+			requestRL(acct, req.ClientId)
+			resp.Status = Success
 			resp.Amount = acct.balance
 		}
 	case Withdraw:
 		acct, found := acctMap[req.Account]
 		if !found {
-			resp.status = AccountNotExist
+			resp.Status = AccountNotExist
 		} else {
-			requestWL(acct, req.clientId)
+			requestWL(acct, req.ClientId)
 			acct.balance -= req.Amount
 		}
 	case Commit:
 		acct, found := acctMap[req.Account]
 		if !found {
-			resp.status = AccountNotExist
+			resp.Status = AccountNotExist
 		} else {
-			releaseAllLock(acct, req.clientId)
-			resp.status = Success
+			releaseAllLock(acct, req.ClientId)
+			resp.Status = Success
 		}
 	}
 
