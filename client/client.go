@@ -141,7 +141,6 @@ func processTransactions() {
 		operation := line[0]
 		if operation == "BEGIN" {
 			hasBegun = true
-
 			fmt.Println("OK")
 			continue
 		}
@@ -185,6 +184,10 @@ func processTransactions() {
 			}
 			resp := <-responseChan
 			processResponse(Deposit, serverName, account, amount, resp, &shouldScan, &lineBuf)
+			if msg.Operation == Abort && resp.Status != Aborted {
+				resp = getResponse(serverName)
+				processResponse(Deposit, serverName, account, amount, resp, &shouldScan, &lineBuf)
+			}
 		case "BALANCE":
 			msg.Operation = Balance
 			msg.Account = account
@@ -196,6 +199,7 @@ func processTransactions() {
 			switch lineBuf {
 			case "ABORT":
 				msg.Operation = Abort
+				msg.Values = currState.backupValues[serverName]
 				sendRequest(serverName, msg)
 				fmt.Println("ABORTED")
 				shouldScan = true
@@ -204,6 +208,10 @@ func processTransactions() {
 			}
 			resp := <-responseChan
 			processResponse(Balance, serverName, account, 0, resp, &shouldScan, &lineBuf)
+			if msg.Operation == Abort && resp.Status != Aborted {
+				resp = getResponse(serverName)
+				processResponse(Balance, serverName, account, 0, resp, &shouldScan, &lineBuf)
+			}
 		case "WITHDRAW":
 			msg.Operation = Withdraw
 			msg.Account = account
@@ -216,6 +224,7 @@ func processTransactions() {
 			switch lineBuf {
 			case "ABORT":
 				msg.Operation = Abort
+				msg.Values = currState.backupValues[serverName]
 				sendRequest(serverName, msg)
 				fmt.Println("ABORTED")
 				shouldScan = true
@@ -224,6 +233,10 @@ func processTransactions() {
 			}
 			resp := <-responseChan
 			processResponse(Withdraw, serverName, account, amount, resp, &shouldScan, &lineBuf)
+			if msg.Operation == Abort && resp.Status != Aborted {
+				resp = getResponse(serverName)
+				processResponse(Withdraw, serverName, account, amount, resp, &shouldScan, &lineBuf)
+			}
 		case "COMMIT":
 			if isCurrBalancesValid() {
 				msg.Operation = Commit
@@ -253,6 +266,9 @@ func sendSilentAbortBut(sentServer string) {
 	var msg Request
 	msg.Operation = Abort
 	for server := range currState.serverNames {
+		// for account, val := range currState.backupValues[server] {
+		// 	fmt.Printf("Server %s Account %s val %d\n", server, account, val)
+		// }
 		if server == sentServer {
 			continue
 		}
@@ -266,6 +282,9 @@ func sendSilentAbort() {
 	msg.Operation = Abort
 	for server := range currState.serverNames {
 		msg.Values = currState.backupValues[server]
+		for account, val := range currState.backupValues[server] {
+			fmt.Printf("Server %s Account %s val %d\n", server, account, val)
+		}
 		sendRequest(server, msg)
 		getResponse(server)
 	}
