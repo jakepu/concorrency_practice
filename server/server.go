@@ -127,13 +127,12 @@ func handleRequest(req Request) Response {
 				acct = &account{balance: req.Amount, writeLockOwner: req.ClientId}
 				acctMap[req.Account] = acct
 			} else {
-				// this account must have been committed
 				requestWL(acct, req.ClientId)
 				acct.balance += req.Amount
-				updateClientLockMap(req.ClientId, acct)
-				resp.Status = Success
-				resp.Amount = acct.balance
 			}
+			updateClientLockMap(req.ClientId, acct)
+			resp.Status = Success
+			resp.Amount = acct.balance
 		}
 
 		// for debug
