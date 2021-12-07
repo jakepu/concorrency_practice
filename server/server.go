@@ -92,13 +92,15 @@ func eventLoop(conn net.Conn) {
 		if err != nil {
 			return
 		}
-		fmt.Print("request-> client:", req.ClientId, ", op:", req.Operation, ", acct:", req.Account, "|")
+		// for debug
+		fmt.Print("REQ-> client:", req.ClientId, ", op:", req.Operation, ", acct:", req.Account, "|")
 		// processing request message and generating response message
 		resp := handleRequest(req)
 		// sending response message
 		encoder := json.NewEncoder(conn)
 		err = encoder.Encode(resp)
-		fmt.Println("|respond-> status:", resp.Status, ", balance:", resp.Amount)
+		// for debug
+		fmt.Println("|RESP-> status:", resp.Status, ", balance:", resp.Amount)
 		if err != nil {
 			return
 		}
@@ -313,6 +315,6 @@ func printLock(acct *account) {
 	for e := acct.readLockOwner.Front(); e != nil; e = e.Next() {
 		fmt.Print(e.Value, ",")
 	}
-	fmt.Print(", W ")
+	fmt.Print("-W ")
 	fmt.Print(acct.writeLockOwner)
 }
