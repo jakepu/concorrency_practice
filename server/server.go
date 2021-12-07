@@ -16,7 +16,7 @@ type account struct {
 	balance        int
 	readLockOwner  list.List
 	writeLockOwner string
-	committed      bool // used to deal with new account scenario
+	established    bool // used to deal with new account scenario
 }
 
 // global variable for server instance
@@ -84,36 +84,27 @@ func processConfigFile() string {
 func eventLoop(conn net.Conn) {
 	defer conn.Close()
 
-	// scanner := bufio.NewScanner(conn)
-
 	for {
 		// process incoming message
-
 		var req Request
-		// req := Request{}
-		// incoming := []byte(scanner.Text())
-		// err := json.Unmarshal(incoming, &req)
 		decoder := json.NewDecoder(conn)
 		err := decoder.Decode(&req)
 		if err != nil {
 			return
 		}
-
+		fmt.Print(req.ClientId, ",", req.Operation, ",", req.Account, "|")
 		resp := handleRequest(req)
-		fmt.Println(resp.Status, resp.Amount)
-		// outgoing, _ := json.Marshal(resp)
+		// sending reply message
 		encoder := json.NewEncoder(conn)
 		err = encoder.Encode(resp)
 		if err != nil {
 			return
 		}
-		// sending reply message
-		// fmt.Fprint(conn, string(outgoing)+"\n")
 	}
 }
 
 func handleRequest(req Request) Response {
-	resp := Response{}
+	resp := Response{Status: Unknown}
 	switch req.Operation {
 	case Deposit:
 		acct, found := acctMap[req.Account]
@@ -125,7 +116,10 @@ func handleRequest(req Request) Response {
 			acct.balance += req.Amount
 		}
 		updateClientLockMap(req.ClientId, acct)
+		fmt.Print(", balance:", acct.balance, ", ")
+		printLock(acct)
 		resp.Status = Success
+		resp.Amount = acct.balance
 	case Balance:
 		acct, found := acctMap[req.Account]
 		if !found {
@@ -135,6 +129,8 @@ func handleRequest(req Request) Response {
 			updateClientLockMap(req.ClientId, acct)
 			resp.Status = Success
 			resp.Amount = acct.balance
+			fmt.Print(", balance:", acct.balance, ", ")
+			printLock(acct)
 		}
 	case Withdraw:
 		acct, found := acctMap[req.Account]
@@ -144,17 +140,24 @@ func handleRequest(req Request) Response {
 			requestWL(acct, req.ClientId)
 			updateClientLockMap(req.ClientId, acct)
 			acct.balance -= req.Amount
+			resp.Status = Success
+			resp.Amount = acct.balance
+			fmt.Print(", balance:", acct.balance, ", ")
+			printLock(acct)
 		}
 	case Commit:
+		// TODO: set all new created acct to be established
 		releaseAllLock(req.ClientId)
+		delete(clientLockMap, req.ClientId)
 		resp.Status = Success
+	case Abort:
+
 	}
 
 	return resp
 }
 
 func requestRL(acct *account, clientId string) {
-	defer fmt.Println(acct.readLockOwner)
 	for {
 		// check if client already has write lock
 		if acct.writeLockOwner == clientId {
@@ -177,27 +180,30 @@ func requestRL(acct *account, clientId string) {
 }
 
 func requestWL(acct *account, clientId string) {
-	defer fmt.Println(acct.writeLockOwner)
-	// check if client already has write lock
-	if acct.writeLockOwner == clientId {
-		return
-	}
-	// check if there is no writeLock
-	if acct.writeLockOwner == "" {
-		if acct.readLockOwner.Len() == 0 {
-			acct.writeLockOwner = clientId
-			return
-		} else if acct.readLockOwner.Len() == 1 && acct.readLockOwner.Front().Value == clientId {
-			acct.writeLockOwner = clientId
-			acct.readLockOwner.Remove(acct.readLockOwner.Front())
+	for {
+		// check if client already has write lock
+		if acct.writeLockOwner == clientId {
 			return
 		}
+		// check if there is no writeLock
+		if acct.writeLockOwner == "" {
+			if acct.readLockOwner.Len() == 0 {
+				acct.writeLockOwner = clientId
+				return
+			} else if acct.readLockOwner.Len() == 1 && acct.readLockOwner.Front().Value == clientId {
+				acct.writeLockOwner = clientId
+				acct.readLockOwner.Remove(acct.readLockOwner.Front())
+				return
+			}
+		}
+		// wait and sleep 500 ms then check again
+		time.Sleep(time.Millisecond * 500)
 	}
-	// wait and sleep 500 ms then check again
-	time.Sleep(time.Millisecond * 500)
 }
 
 func releaseAllLock(clientId string) {
+	defer fmt.Println(clientId, " release clock")
+
 	l := clientLockMap[clientId]
 	for _, v := range l {
 		if v.writeLockOwner == clientId {
@@ -229,4 +235,13 @@ func updateClientLockMap(clientId string, acct *account) {
 	}
 
 	clientLockMap[clientId] = append(l, acct)
+}
+
+func printLock(acct *account) {
+	fmt.Print("lock: ")
+	for e := acct.readLockOwner.Front(); e != nil; e = e.Next() {
+		fmt.Print(e.Value, ",")
+	}
+	fmt.Print("|")
+	fmt.Println(acct.writeLockOwner)
 }
