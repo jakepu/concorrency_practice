@@ -1,0 +1,132 @@
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"net"
+	"os"
+	"strconv"
+	"strings"
+)
+
+var nodeId string
+var hasBegun bool
+var serverConnPool map[string]net.Conn
+
+const (
+	numServers int = 5
+)
+
+func main() {
+	configAndConnectServers()
+	go processTransactions()
+}
+
+func processTransactions() {
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Split(bufio.ScanLines)
+	for {
+		scanner.Scan()
+		oneLine := scanner.Text()
+		line := strings.Split(oneLine, " ")
+		operation := line[0]
+		if operation == "BEGIN" {
+			hasBegun = true
+			continue
+		}
+		if !hasBegun {
+			continue
+		}
+		var serverName string
+		var account string
+		var target string
+		var amount int
+		if len(line) > 1 {
+			fmt.Sscanf(target, "%s.%s", &serverName, &account)
+			target = line[1]
+			if len(line) > 2 {
+				amount, _ = strconv.Atoi(line[2])
+			}
+		}
+
+		var msg Request
+		switch operation {
+		case "DEPOSIT":
+			msg.Operation = Deposit
+			msg.Account = account
+			msg.Amount = amount
+		case "BALANCE":
+			msg.Operation = Balance
+			msg.Account = account
+		case "WITHDRAW":
+			msg.Operation = Withdraw
+			msg.Account = account
+			msg.Amount = amount
+		case "COMMIT":
+			hasBegun = false
+		}
+		encoder := json.NewEncoder(serverConnPool[serverName])
+		err := encoder.Encode(msg)
+		if err != nil {
+			panic("Cannot encode the request msg.")
+		}
+		decoder := json.NewDecoder(serverConnPool[serverName])
+		var replyMsg Response
+		err = decoder.Decode(&replyMsg)
+		if err != nil {
+			panic("Failed to receive and decode json")
+		}
+		switch replyMsg.Status {
+		case Success:
+			fmt.Print("Success")
+		case AccountNotExist:
+			fmt.Print("Account not exist")
+		}
+
+	}
+}
+
+func configAndConnectServers() {
+	//example command: ./client {node id} {config file}
+	args := os.Args
+	if len(args) != 3 {
+		panic("Not enough arguments.")
+	}
+
+	nodeId = args[1]
+	configFile := args[2]
+
+	// reading config file
+	file, err := os.Open(configFile)
+	if err != nil {
+		panic("Cannot open config file")
+	}
+
+	scanner := bufio.NewScanner(file)
+	scanner.Split(bufio.ScanLines)
+
+	for i := 0; i < numServers; i++ {
+		// example: node2 fa21-cs425-g01-02.cs.illinois.edu 1234
+		scanner.Scan()
+		line := strings.Split(scanner.Text(), " ")
+		serverName := line[0]
+		serverAddr := line[1]
+		serverPort := line[2]
+		serverAddr = serverAddr + ":" + serverPort
+		tcpAddr, _ := net.ResolveTCPAddr("tcp4", serverAddr)
+		conn, err := net.DialTCP("tcp", nil, tcpAddr)
+		if err != nil {
+			errStr := fmt.Sprintf("Cannot connect to server %s", serverAddr)
+			panic(errStr)
+		}
+		err = conn.SetKeepAlive(true)
+		if err != nil {
+			errStr := fmt.Sprintf("Cannot keep TCP connection to server %s alive", serverAddr)
+			panic(errStr)
+		}
+		serverConnPool[serverName] = conn
+	}
+
+	file.Close()
+}
