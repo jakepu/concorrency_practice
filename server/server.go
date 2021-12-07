@@ -93,7 +93,7 @@ func eventLoop(conn net.Conn) {
 			return
 		}
 		// for debug
-		fmt.Print("REQ-> client:", req.ClientId, ", op:", req.Operation, ", acct:", req.Account, "|")
+		fmt.Print("REQ-> client:", req.ClientId, ", op:", req.Operation, ", acct:", req.Account)
 		// processing request message and generating response message
 		resp := handleRequest(req)
 		// sending response message
@@ -253,7 +253,7 @@ func requestWL(acct *account, clientId string) {
 
 func releaseAllLock(clientId string) {
 	// for debug
-	defer fmt.Println("lock released")
+	defer fmt.Println("|lock released")
 
 	l := clientLockMap[clientId]
 	for _, v := range l {
@@ -298,12 +298,15 @@ func confirmNewValues(newValues map[string]int) {
 }
 
 func resetToOldValues(oldValues map[string]int) {
+	fmt.Print("|old:")
 	for acct, initValue := range oldValues {
 		if acctMap[acct].established {
 			// reset modified account to old value
+			fmt.Printf("E-%s-%d,", acct, initValue)
 			acctMap[acct].balance = initValue
 		} else {
 			// remove new created account
+			fmt.Printf("N-%s", acct)
 			delete(acctMap, acct)
 		}
 	}
@@ -311,10 +314,10 @@ func resetToOldValues(oldValues map[string]int) {
 
 // for debug
 func printLock(acct *account) {
-	fmt.Print("lock:R ")
+	fmt.Print("|RL:")
 	for e := acct.readLockOwner.Front(); e != nil; e = e.Next() {
 		fmt.Print(e.Value, ",")
 	}
-	fmt.Print("-W ")
+	fmt.Print(", WL:")
 	fmt.Print(acct.writeLockOwner)
 }
