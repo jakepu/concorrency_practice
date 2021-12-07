@@ -122,7 +122,7 @@ func handleRequest(req Request) Response {
 		} else {
 			// this account is created by another active txn, we need to wait for the lock to be release to check again if this account is committed or aborted
 			requestWL(acct, req.ClientId)
-			acct, found := acctMap[req.Account]
+			acct, found = acctMap[req.Account]
 			if !found {
 				acct = &account{balance: req.Amount, writeLockOwner: req.ClientId}
 				acctMap[req.Account] = acct
@@ -308,7 +308,7 @@ func resetToOldValues(oldValues map[string]int) {
 			acctMap[acct].balance = initValue
 		} else {
 			// remove new created account
-			fmt.Printf("N-%s", acct)
+			fmt.Printf("N-%s-%d,", acct, initValue)
 			delete(acctMap, acct)
 		}
 	}
