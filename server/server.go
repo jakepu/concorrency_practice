@@ -16,7 +16,7 @@ type account struct {
 	balance        int
 	readLockOwner  list.List
 	writeLockOwner string
-	committed      bool // used to deal with new account scenario
+	established    bool // used to deal with new account scenario
 }
 
 // global variable for server instance
@@ -128,6 +128,7 @@ func handleRequest(req Request) Response {
 		fmt.Print(", balance:", acct.balance, ", ")
 		printLock(acct)
 		resp.Status = Success
+		resp.Amount = acct.balance
 	case Balance:
 		acct, found := acctMap[req.Account]
 		if !found {
@@ -148,10 +149,13 @@ func handleRequest(req Request) Response {
 			requestWL(acct, req.ClientId)
 			updateClientLockMap(req.ClientId, acct)
 			acct.balance -= req.Amount
+			resp.Status = Success
+			resp.Amount = acct.balance
 			fmt.Print(", balance:", acct.balance, ", ")
 			printLock(acct)
 		}
 	case Commit:
+		// set all new created acct to be established
 		releaseAllLock(req.ClientId)
 		delete(clientLockMap, req.ClientId)
 		resp.Status = Success
