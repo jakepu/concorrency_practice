@@ -16,7 +16,7 @@ var serverConnPool map[string]net.Conn
 
 func main() {
 	configAndConnectServers()
-	go processTransactions()
+	processTransactions()
 }
 
 var transactionState map[string]map[string]int
@@ -43,7 +43,9 @@ func processTransactions() {
 		var amount int
 		if len(line) > 1 {
 			target = line[1]
-			fmt.Sscanf(target, "%s.%s", &serverName, &account)
+			tmp := strings.Split(target, ".")
+			serverName = tmp[0]
+			account = tmp[1]
 			if len(line) > 2 {
 				amount, _ = strconv.Atoi(line[2])
 			}
@@ -82,9 +84,9 @@ func processTransactions() {
 		}
 		switch replyMsg.Status {
 		case Success:
-			fmt.Print("Success")
+			fmt.Println("Success")
 		case AccountNotExist:
-			fmt.Print("Account not exist")
+			fmt.Println("Account not exist")
 		}
 
 	}
@@ -133,6 +135,7 @@ func configAndConnectServers() {
 			panic(errStr)
 		}
 		serverConnPool[serverName] = conn
+		fmt.Println(serverName)
 	}
 
 	file.Close()
