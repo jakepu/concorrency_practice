@@ -92,12 +92,13 @@ func eventLoop(conn net.Conn) {
 		if err != nil {
 			return
 		}
-		fmt.Print(req.ClientId, ",", req.Operation, ",", req.Account, "|")
+		fmt.Print("request-> client:", req.ClientId, ", operation:", req.Operation, ", acct:", req.Account, "|")
 		// processing request message and generating response message
 		resp := handleRequest(req)
 		// sending response message
 		encoder := json.NewEncoder(conn)
 		err = encoder.Encode(resp)
+		fmt.Println("|respond-> status:", resp.Status, ", balance:", resp.Amount)
 		if err != nil {
 			return
 		}
@@ -134,7 +135,6 @@ func handleRequest(req Request) Response {
 		resp.Amount = acct.balance
 
 		// for debug
-		fmt.Print(", balance:", acct.balance, ", ")
 		printLock(acct)
 	case Balance:
 		acct, found := acctMap[req.Account]
@@ -147,7 +147,6 @@ func handleRequest(req Request) Response {
 			resp.Amount = acct.balance
 
 			// for debug
-			fmt.Print(", balance:", acct.balance, ", ")
 			printLock(acct)
 		} else {
 			requestRL(acct, req.ClientId)
@@ -161,7 +160,6 @@ func handleRequest(req Request) Response {
 				resp.Amount = acct.balance
 
 				// for debug
-				fmt.Print(", balance:", acct.balance, ", ")
 				printLock(acct)
 			}
 		}
@@ -177,7 +175,6 @@ func handleRequest(req Request) Response {
 			resp.Amount = acct.balance
 
 			// for debug
-			fmt.Print(", balance:", acct.balance, ", ")
 			printLock(acct)
 		} else {
 			requestWL(acct, req.ClientId)
@@ -192,7 +189,6 @@ func handleRequest(req Request) Response {
 				resp.Amount = acct.balance
 
 				// for debug
-				fmt.Print(", balance:", acct.balance, ", ")
 				printLock(acct)
 			}
 		}
@@ -255,7 +251,7 @@ func requestWL(acct *account, clientId string) {
 
 func releaseAllLock(clientId string) {
 	// for debug
-	defer fmt.Println(clientId, " release clock")
+	defer fmt.Println("lock released")
 
 	l := clientLockMap[clientId]
 	for _, v := range l {
