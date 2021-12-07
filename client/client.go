@@ -14,10 +14,6 @@ var nodeId string
 var hasBegun bool
 var serverConnPool map[string]net.Conn
 
-const (
-	numServers int = 5
-)
-
 func main() {
 	configAndConnectServers()
 	go processTransactions()
@@ -101,6 +97,7 @@ func configAndConnectServers() {
 	nodeId = args[1]
 	configFile := args[2]
 
+	serverConnPool = make(map[string]net.Conn)
 	// reading config file
 	file, err := os.Open(configFile)
 	if err != nil {
@@ -110,15 +107,18 @@ func configAndConnectServers() {
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
 
-	for i := 0; i < numServers; i++ {
+	for scanner.Scan() {
 		// example: node2 fa21-cs425-g01-02.cs.illinois.edu 1234
-		scanner.Scan()
 		line := strings.Split(scanner.Text(), " ")
 		serverName := line[0]
 		serverAddr := line[1]
 		serverPort := line[2]
 		serverAddr = serverAddr + ":" + serverPort
-		tcpAddr, _ := net.ResolveTCPAddr("tcp4", serverAddr)
+		tcpAddr, err := net.ResolveTCPAddr("tcp4", serverAddr)
+		if err != nil {
+			errStr := fmt.Sprintf("Cannot resolve TCP %s", serverAddr)
+			panic(errStr)
+		}
 		conn, err := net.DialTCP("tcp", nil, tcpAddr)
 		if err != nil {
 			errStr := fmt.Sprintf("Cannot connect to server %s", serverAddr)
