@@ -59,7 +59,9 @@ func sendRequestAndGetResponse(serverName string, req Request, responseChan chan
 
 func initTransactionState() {
 	hasBegun = false
-	currState = transactionState{}
+	currState = transactionState{make(map[string]map[string]int),
+		make(map[string]map[string]int),
+		make(map[string]bool)}
 }
 
 func printResponse(serverName string, req Request, resp Response) {
@@ -91,27 +93,34 @@ func isCurrBalancesValid() bool {
 	return true
 }
 
-func processResponse(operation int, serverName string, account string, amount int, resp Response) {
-	if _, found := currState.currValues[serverName]; !found {
-		currState.currValues[serverName] = make(map[string]int)
-	}
-	if _, found := currState.currValues[serverName][account]; !found {
-		// If this transaction has not modified this account's states yet
-		// we should save its value before we modify it
-		if _, found := currState.backupValues[serverName]; !found {
-			currState.backupValues[serverName] = make(map[string]int)
+func processResponse(operation int, serverName string, account string, amount int, resp Response, shouldScan *bool, lineBuf *string) {
+	switch resp.Status {
+	case Success:
+		if _, found := currState.currValues[serverName]; !found {
+			currState.currValues[serverName] = make(map[string]int)
 		}
-		switch operation {
-		case Balance:
-			currState.backupValues[serverName][account] = resp.Amount
-		case Deposit:
-			currState.backupValues[serverName][account] = resp.Amount - amount
-		case Withdraw:
-			currState.backupValues[serverName][account] = resp.Amount + amount
+		if _, found := currState.currValues[serverName][account]; !found {
+			// If this transaction has not modified this account's states yet
+			// we should save its value before we modify it
+			if _, found := currState.backupValues[serverName]; !found {
+				currState.backupValues[serverName] = make(map[string]int)
+			}
+			switch operation {
+			case Balance:
+				currState.backupValues[serverName][account] = resp.Amount
+			case Deposit:
+				currState.backupValues[serverName][account] = resp.Amount - amount
+			case Withdraw:
+				currState.backupValues[serverName][account] = resp.Amount + amount
+			}
 		}
+		currState.currValues[serverName][account] = resp.Amount
+		currState.serverNames[serverName] = true
+	default:
+		*shouldScan = false
+		*lineBuf = "ABORT"
 	}
-	currState.currValues[serverName][account] = resp.Amount
-	currState.serverNames[serverName] = true
+
 }
 
 func processTransactions() {
@@ -171,11 +180,7 @@ func processTransactions() {
 				shouldScan = false
 			}
 			resp := <-responseChan
-			if resp.Status != Success {
-				initTransactionState()
-				continue
-			}
-			processResponse(Deposit, serverName, account, amount, resp)
+			processResponse(Deposit, serverName, account, amount, resp, &shouldScan, &lineBuf)
 		case "BALANCE":
 			msg.Operation = Balance
 			msg.Account = account
@@ -193,11 +198,7 @@ func processTransactions() {
 				shouldScan = false
 			}
 			resp := <-responseChan
-			if resp.Status != Success {
-				initTransactionState()
-				continue
-			}
-			processResponse(Balance, serverName, account, 0, resp)
+			processResponse(Balance, serverName, account, 0, resp, &shouldScan, &lineBuf)
 		case "WITHDRAW":
 			msg.Operation = Withdraw
 			msg.Account = account
@@ -216,7 +217,7 @@ func processTransactions() {
 				shouldScan = false
 			}
 			resp := <-responseChan
-			processResponse(Withdraw, serverName, account, amount, resp)
+			processResponse(Withdraw, serverName, account, amount, resp, &shouldScan, &lineBuf)
 		case "COMMIT":
 			if isCurrBalancesValid() {
 				msg.Operation = Commit
@@ -236,6 +237,17 @@ func processTransactions() {
 				fmt.Println("ABORTED")
 			}
 			shouldScan = true
+			initTransactionState()
+
+		case "ABORT":
+			msg.Operation = Abort
+			for server := range currState.serverNames {
+				msg.Values = currState.backupValues[server]
+				sendRequest(server, msg)
+				getResponse(server)
+			}
+			shouldScan = true
+			initTransactionState()
 		}
 
 	}
@@ -292,5 +304,5 @@ func configAndConnectServers() {
 func init() {
 	scanner = bufio.NewScanner(os.Stdin)
 	scanner.Split(bufio.ScanLines)
-	currState = transactionState{}
+	initTransactionState()
 }
