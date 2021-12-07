@@ -23,6 +23,8 @@ type account struct {
 var acctMap map[string]*account // accountId -> account. store all account information, using map for quicker lookup.
 
 func main() {
+	acctMap = make(map[string]*account)
+
 	port := processConfigFile()
 	// listen on port on localhost
 	//fmt.Println(port)
