@@ -13,25 +13,97 @@ import (
 var nodeId string
 var hasBegun bool
 var serverConnPool map[string]net.Conn
+var scanner *bufio.Scanner // stdin scanner
+
+type transactionState struct {
+	currValues   map[string]map[string]int
+	backupValues map[string]map[string]int
+	serverName   []string
+}
+
+var currState transactionState
 
 func main() {
 	configAndConnectServers()
 	processTransactions()
 }
 
-var transactionState map[string]map[string]int
+func sendRequest(serverName string, msg Request) {
+	encoder := json.NewEncoder(serverConnPool[serverName])
+	err := encoder.Encode(msg)
+	// msgSerialized, err := json.Marshal(msg)
+	// msgSerializedText := string(msgSerialized) + "\n"
+	if err != nil {
+		panic("Cannot encode the request msg.")
+	}
+	// fmt.Fprint(serverConnPool[serverName], msgSerializedText)
+}
+func sendRequestAndGetResponse(serverName string, msg Request, responseChan chan<- Response) {
+	sendRequest(serverName, msg)
+	decoder := json.NewDecoder(serverConnPool[serverName])
+	var replyMsg Response
+	err := decoder.Decode(&replyMsg)
+	if err != nil {
+		panic("Failed to receive and decode json")
+	}
+	printResponse(replyMsg)
+	responseChan <- replyMsg
 
+}
+func initTransactionState() {
+	hasBegun = false
+	currState = transactionState{}
+}
+func printResponse(resp Response) {
+	switch resp.Status {
+	case Success:
+		fmt.Println("OK")
+	case AccountNotExist:
+		fmt.Println("NOT FOUND, ABORTED")
+	case Aborted:
+		fmt.Println("ABORTED")
+	case Unknown:
+		panic("Received status 'Unknown' from server")
+	}
+}
+func processResponse(operation int, serverName string, account string, amount int, resp Response) {
+	if _, found := currState.currValues[serverName]; !found {
+		currState.currValues[serverName] = make(map[string]int)
+	}
+	if _, found := currState.currValues[serverName][account]; !found {
+		// If this transaction has not modified this account's states yet
+		// we should save its value before we modify it
+		if _, found := currState.backupValues[serverName]; !found {
+			currState.backupValues[serverName] = make(map[string]int)
+		}
+		switch operation {
+		case Balance:
+			currState.backupValues[serverName][account] = resp.Amount
+		case Deposit:
+			currState.backupValues[serverName][account] = resp.Amount - amount
+		case Withdraw:
+			currState.backupValues[serverName][account] = resp.Amount + amount
+		}
+	}
+	currState.currValues[serverName][account] = resp.Amount
+}
 func processTransactions() {
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Split(bufio.ScanLines)
+	shouldScan := true
+	var lineBuf string
 	for {
-		scanner.Scan()
-		oneLine := scanner.Text()
+		var oneLine string
+		if shouldScan {
+			scanner.Scan()
+			oneLine = scanner.Text()
+		} else {
+			oneLine = lineBuf
+		}
 		line := strings.Split(oneLine, " ")
 		operation := line[0]
 		if operation == "BEGIN" {
 			hasBegun = true
-			transactionState = make(map[string]map[string]int)
+
+			fmt.Println("OK")
 			continue
 		}
 		if !hasBegun {
@@ -58,35 +130,69 @@ func processTransactions() {
 			msg.Operation = Deposit
 			msg.Account = account
 			msg.Amount = amount
+			responseChan := make(chan Response)
+			go sendRequestAndGetResponse(serverName, msg, responseChan)
+			// scan next line
+			scanner.Scan()
+			lineBuf = scanner.Text()
+			switch lineBuf {
+			case "ABORT":
+				msg.Operation = Abort
+				sendRequest(serverName, msg)
+				shouldScan = true
+			default:
+				shouldScan = false
+			}
+			resp := <-responseChan
+			if resp.Status != Success {
+				initTransactionState()
+				continue
+			}
+			processResponse(Deposit, serverName, account, amount, resp)
 		case "BALANCE":
 			msg.Operation = Balance
 			msg.Account = account
+			responseChan := make(chan Response)
+			go sendRequestAndGetResponse(serverName, msg, responseChan)
+			// scan next line
+			scanner.Scan()
+			lineBuf = scanner.Text()
+			switch lineBuf {
+			case "ABORT":
+				msg.Operation = Abort
+				sendRequest(serverName, msg)
+				shouldScan = true
+			default:
+				shouldScan = false
+			}
+			resp := <-responseChan
+			if resp.Status != Success {
+				initTransactionState()
+				continue
+			}
+			processResponse(Balance, serverName, account, 0, resp)
 		case "WITHDRAW":
 			msg.Operation = Withdraw
 			msg.Account = account
 			msg.Amount = amount
+			responseChan := make(chan Response)
+			go sendRequestAndGetResponse(serverName, msg, responseChan)
+			// scan next line
+			scanner.Scan()
+			lineBuf = scanner.Text()
+			switch lineBuf {
+			case "ABORT":
+				msg.Operation = Abort
+				sendRequest(serverName, msg)
+				shouldScan = true
+			default:
+				shouldScan = false
+			}
+			resp := <-responseChan
+			processResponse(Withdraw, serverName, account, amount, resp)
 		case "COMMIT":
-			hasBegun = false
-		}
-		encoder := json.NewEncoder(serverConnPool[serverName])
-		err := encoder.Encode(msg)
-		// msgSerialized, err := json.Marshal(msg)
-		// msgSerializedText := string(msgSerialized) + "\n"
-		if err != nil {
-			panic("Cannot encode the request msg.")
-		}
-		// fmt.Fprint(serverConnPool[serverName], msgSerializedText)
-		decoder := json.NewDecoder(serverConnPool[serverName])
-		var replyMsg Response
-		err = decoder.Decode(&replyMsg)
-		if err != nil {
-			panic("Failed to receive and decode json")
-		}
-		switch replyMsg.Status {
-		case Success:
-			fmt.Println("Success")
-		case AccountNotExist:
-			fmt.Println("Account not exist")
+			msg.Operation = Commit
+			//checkCurrBalances()
 		}
 
 	}
@@ -135,8 +241,13 @@ func configAndConnectServers() {
 			panic(errStr)
 		}
 		serverConnPool[serverName] = conn
-		fmt.Println(serverName)
 	}
 
 	file.Close()
+}
+
+func init() {
+	scanner = bufio.NewScanner(os.Stdin)
+	scanner.Split(bufio.ScanLines)
+	currState = transactionState{}
 }
