@@ -116,9 +116,9 @@ func processResponse(operation int, serverName string, account string, amount in
 		}
 		currState.currValues[serverName][account] = resp.Amount
 		currState.serverNames[serverName] = true
-	case Aborted:
-		sendSilentAbortBut(serverName)
-		initTransactionState()
+	// case Aborted:
+	// 	sendSilentAbortBut(serverName)
+	// 	initTransactionState()
 	default:
 		sendSilentAbort()
 		initTransactionState()
@@ -184,10 +184,7 @@ func processTransactions() {
 			}
 			resp := <-responseChan
 			processResponse(Deposit, serverName, account, amount, resp, &shouldScan, &lineBuf)
-			for account, val := range currState.backupValues[serverName] {
-				fmt.Printf("Server %s Account %s val %d\n", serverName, account, val)
-			}
-			if msg.Operation == PreAbort && resp.Status != Aborted {
+			if msg.Operation == PreAbort && resp.Status != PreAborted {
 				resp = getResponse(serverName)
 				processResponse(Deposit, serverName, account, amount, resp, &shouldScan, &lineBuf)
 			}
@@ -210,7 +207,7 @@ func processTransactions() {
 			}
 			resp := <-responseChan
 			processResponse(Balance, serverName, account, 0, resp, &shouldScan, &lineBuf)
-			if msg.Operation == PreAbort && resp.Status != Aborted {
+			if msg.Operation == PreAbort && resp.Status != PreAborted {
 				resp = getResponse(serverName)
 				processResponse(Balance, serverName, account, 0, resp, &shouldScan, &lineBuf)
 			}
@@ -234,7 +231,7 @@ func processTransactions() {
 			}
 			resp := <-responseChan
 			processResponse(Withdraw, serverName, account, amount, resp, &shouldScan, &lineBuf)
-			if msg.Operation == PreAbort && resp.Status != Aborted {
+			if msg.Operation == PreAbort && resp.Status != PreAborted {
 				resp = getResponse(serverName)
 				processResponse(Withdraw, serverName, account, amount, resp, &shouldScan, &lineBuf)
 			}
@@ -263,29 +260,31 @@ func processTransactions() {
 
 	}
 }
-func sendSilentAbortBut(sentServer string) {
-	var msg Request
-	msg.Operation = Abort
-	for server := range currState.serverNames {
-		// for account, val := range currState.backupValues[server] {
-		// 	fmt.Printf("Server %s Account %s val %d\n", server, account, val)
-		// }
-		if server == sentServer {
-			continue
-		}
-		msg.Values = currState.backupValues[server]
-		sendRequest(server, msg)
-		getResponse(server)
-	}
-}
+
+// func sendSilentAbortBut(sentServer string) {
+// 	var msg Request
+// 	msg.Operation = Abort
+// 	for server := range currState.serverNames {
+// 		// for account, val := range currState.backupValues[server] {
+// 		// 	fmt.Printf("Server %s Account %s val %d\n", server, account, val)
+// 		// }
+// 		if server == sentServer {
+// 			continue
+// 		}
+// 		msg.Values = currState.backupValues[server]
+// 		sendRequest(server, msg)
+// 		getResponse(server)
+// 	}
+// }
 func sendSilentAbort() {
 	var msg Request
 	msg.Operation = Abort
+	msg.ClientId = nodeId
 	for server := range currState.serverNames {
 		msg.Values = currState.backupValues[server]
-		for account, val := range currState.backupValues[server] {
-			fmt.Printf("Server %s Account %s val %d\n", server, account, val)
-		}
+		// for account, val := range currState.backupValues[server] {
+		// 	fmt.Printf("Server %s Account %s val %d\n", server, account, val)
+		// }
 		sendRequest(server, msg)
 		getResponse(server)
 	}
