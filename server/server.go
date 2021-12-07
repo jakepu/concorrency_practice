@@ -113,13 +113,28 @@ func handleRequest(req Request) Response {
 			// create a new account and assign the write lock to the client
 			acct = &account{balance: req.Amount, writeLockOwner: req.ClientId}
 			acctMap[req.Account] = acct
-		} else {
+		} else if acct.established {
 			requestWL(acct, req.ClientId)
 			acct.balance += req.Amount
+			updateClientLockMap(req.ClientId, acct)
+			resp.Status = Success
+			resp.Amount = acct.balance
+		} else {
+			// this account is created by another active txn, we need to wait for the lock to be release to check again if this account is committed or aborted
+			requestWL(acct, req.ClientId)
+			acct, found := acctMap[req.Account]
+			if !found {
+				acct = &account{balance: req.Amount, writeLockOwner: req.ClientId}
+				acctMap[req.Account] = acct
+			} else {
+				// this account must have been committed
+				requestWL(acct, req.ClientId)
+				acct.balance += req.Amount
+				updateClientLockMap(req.ClientId, acct)
+				resp.Status = Success
+				resp.Amount = acct.balance
+			}
 		}
-		updateClientLockMap(req.ClientId, acct)
-		resp.Status = Success
-		resp.Amount = acct.balance
 
 		// for debug
 		fmt.Print(", balance:", acct.balance, ", ")
@@ -128,7 +143,7 @@ func handleRequest(req Request) Response {
 		acct, found := acctMap[req.Account]
 		if !found {
 			resp.Status = AccountNotExist
-		} else {
+		} else if acct.established {
 			requestRL(acct, req.ClientId)
 			updateClientLockMap(req.ClientId, acct)
 			resp.Status = Success
@@ -137,12 +152,27 @@ func handleRequest(req Request) Response {
 			// for debug
 			fmt.Print(", balance:", acct.balance, ", ")
 			printLock(acct)
+		} else {
+			requestRL(acct, req.ClientId)
+			acct, found := acctMap[req.Account]
+			if !found {
+				resp.Status = AccountNotExist
+			} else {
+				requestRL(acct, req.ClientId)
+				updateClientLockMap(req.ClientId, acct)
+				resp.Status = Success
+				resp.Amount = acct.balance
+
+				// for debug
+				fmt.Print(", balance:", acct.balance, ", ")
+				printLock(acct)
+			}
 		}
 	case Withdraw:
 		acct, found := acctMap[req.Account]
 		if !found {
 			resp.Status = AccountNotExist
-		} else {
+		} else if acct.established {
 			requestWL(acct, req.ClientId)
 			acct.balance -= req.Amount
 			updateClientLockMap(req.ClientId, acct)
@@ -152,6 +182,22 @@ func handleRequest(req Request) Response {
 			// for debug
 			fmt.Print(", balance:", acct.balance, ", ")
 			printLock(acct)
+		} else {
+			requestWL(acct, req.ClientId)
+			acct, found := acctMap[req.Account]
+			if !found {
+				resp.Status = AccountNotExist
+			} else {
+				requestWL(acct, req.ClientId)
+				acct.balance -= req.Amount
+				updateClientLockMap(req.ClientId, acct)
+				resp.Status = Success
+				resp.Amount = acct.balance
+
+				// for debug
+				fmt.Print(", balance:", acct.balance, ", ")
+				printLock(acct)
+			}
 		}
 	case Commit:
 		confirmNewValues(req.Values)
