@@ -84,15 +84,9 @@ func processConfigFile() string {
 func eventLoop(conn net.Conn) {
 	defer conn.Close()
 
-	// scanner := bufio.NewScanner(conn)
-
 	for {
 		// process incoming message
-
 		var req Request
-		// req := Request{}
-		// incoming := []byte(scanner.Text())
-		// err := json.Unmarshal(incoming, &req)
 		decoder := json.NewDecoder(conn)
 		err := decoder.Decode(&req)
 		if err != nil {
@@ -100,20 +94,17 @@ func eventLoop(conn net.Conn) {
 		}
 		fmt.Print(req.ClientId, ",", req.Operation, ",", req.Account, "|")
 		resp := handleRequest(req)
-		//fmt.Println(resp.Status, resp.Amount)
-		// outgoing, _ := json.Marshal(resp)
+		// sending reply message
 		encoder := json.NewEncoder(conn)
 		err = encoder.Encode(resp)
 		if err != nil {
 			return
 		}
-		// sending reply message
-		// fmt.Fprint(conn, string(outgoing)+"\n")
 	}
 }
 
 func handleRequest(req Request) Response {
-	resp := Response{}
+	resp := Response{Status: Unknown}
 	switch req.Operation {
 	case Deposit:
 		acct, found := acctMap[req.Account]
@@ -155,10 +146,12 @@ func handleRequest(req Request) Response {
 			printLock(acct)
 		}
 	case Commit:
-		// set all new created acct to be established
+		// TODO: set all new created acct to be established
 		releaseAllLock(req.ClientId)
 		delete(clientLockMap, req.ClientId)
 		resp.Status = Success
+	case Abort:
+
 	}
 
 	return resp
@@ -209,6 +202,8 @@ func requestWL(acct *account, clientId string) {
 }
 
 func releaseAllLock(clientId string) {
+	defer fmt.Println(clientId, " release clock")
+
 	l := clientLockMap[clientId]
 	for _, v := range l {
 		if v.writeLockOwner == clientId {
@@ -222,8 +217,6 @@ func releaseAllLock(clientId string) {
 				return
 			}
 		}
-
-		printLock(v)
 	}
 }
 
