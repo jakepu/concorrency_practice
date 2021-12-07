@@ -15,6 +15,7 @@ const (
 )
 
 type Request struct {
+	clientId      string
 	Operation     int
 	Account       string
 	Amount        int

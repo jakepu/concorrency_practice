@@ -75,34 +75,28 @@ func processConfigFile() string {
 func eventLoop(conn net.Conn) {
 	defer conn.Close()
 
-	scanner := bufio.NewScanner(conn)
-
-	for scanner.Scan() {
-		// process incoming message
-
+	for {
 		req := Request{}
-		incoming := []byte(scanner.Text())
-		err := json.Unmarshal(incoming, &req)
+		d := json.NewDecoder(conn)
+		err := d.Decode(&req)
 		if err != nil {
 			fmt.Println(err)
 		}
 
 		resp := handleRequest(req)
-		outgoing, _ := json.Marshal(resp)
-		// sending reply message
-		fmt.Fprintf(conn, outgoing)
+
 	}
 }
 
-func handleRequest(req Request, clientId string) Response {
+func handleRequest(req Request) Response {
 	resp := Response{}
 	switch req.Operation {
 	case Deposit:
 		acct, found := acctMap[req.Account]
 		if !found {
-			acct = &account{balance: req.Amount, writeLockOwner: clientId}
+			acct = &account{balance: req.Amount, writeLockOwner: req.clientId}
 		} else {
-			requestWL(acct, clientId)
+			requestWL(acct, req.clientId)
 			acct.balance += req.Amount
 		}
 		resp.status = Success
@@ -111,7 +105,7 @@ func handleRequest(req Request, clientId string) Response {
 		if !found {
 			resp.status = AccountNotExist
 		} else {
-			requestRL(acct, clientId)
+			requestRL(acct, req.clientId)
 			resp.status = Success
 			resp.Amount = acct.balance
 		}
@@ -120,7 +114,7 @@ func handleRequest(req Request, clientId string) Response {
 		if !found {
 			resp.status = AccountNotExist
 		} else {
-			requestWL(acct, clientId)
+			requestWL(acct, req.clientId)
 			acct.balance -= req.Amount
 		}
 	case Commit:
@@ -128,7 +122,7 @@ func handleRequest(req Request, clientId string) Response {
 		if !found {
 			resp.status = AccountNotExist
 		} else {
-			releaseAllLock(acct, clientId)
+			releaseAllLock(acct, req.clientId)
 			resp.status = Success
 		}
 	}
