@@ -202,6 +202,8 @@ func handleRequest(req Request) Response {
 		resetToOldValues(req.Values)
 		releaseAllLock(req.ClientId)
 		resp.Status = Aborted
+	case PreAbort:
+		resp.Status = PreAborted
 	}
 
 	return resp

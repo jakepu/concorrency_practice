@@ -11,6 +11,7 @@ const (
 	// server status
 	Success
 	AccountNotExist
+	PreAborted
 	Aborted
 	Unknown
 )
