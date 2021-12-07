@@ -116,9 +116,12 @@ func processResponse(operation int, serverName string, account string, amount in
 		}
 		currState.currValues[serverName][account] = resp.Amount
 		currState.serverNames[serverName] = true
+	case Aborted:
+		sendSilentAbortBut(serverName)
+		initTransactionState()
 	default:
-		*shouldScan = false
-		*lineBuf = "ABORT"
+		sendSilentAbort()
+		initTransactionState()
 	}
 
 }
@@ -175,6 +178,7 @@ func processTransactions() {
 			case "ABORT":
 				msg.Operation = Abort
 				sendRequest(serverName, msg)
+				fmt.Println("ABORTED")
 				shouldScan = true
 			default:
 				shouldScan = false
@@ -193,6 +197,7 @@ func processTransactions() {
 			case "ABORT":
 				msg.Operation = Abort
 				sendRequest(serverName, msg)
+				fmt.Println("ABORTED")
 				shouldScan = true
 			default:
 				shouldScan = false
@@ -212,6 +217,7 @@ func processTransactions() {
 			case "ABORT":
 				msg.Operation = Abort
 				sendRequest(serverName, msg)
+				fmt.Println("ABORTED")
 				shouldScan = true
 			default:
 				shouldScan = false
@@ -228,28 +234,40 @@ func processTransactions() {
 				}
 				fmt.Println("COMMIT OK")
 			} else {
-				msg.Operation = Abort
-				for server := range currState.serverNames {
-					msg.Values = currState.backupValues[server]
-					sendRequest(server, msg)
-					getResponse(server)
-				}
+				sendSilentAbort()
 				fmt.Println("ABORTED")
 			}
 			shouldScan = true
 			initTransactionState()
 
 		case "ABORT":
-			msg.Operation = Abort
-			for server := range currState.serverNames {
-				msg.Values = currState.backupValues[server]
-				sendRequest(server, msg)
-				getResponse(server)
-			}
+			sendSilentAbort()
+			fmt.Println("ABORTED")
 			shouldScan = true
 			initTransactionState()
 		}
 
+	}
+}
+func sendSilentAbortBut(sentServer string) {
+	var msg Request
+	msg.Operation = Abort
+	for server := range currState.serverNames {
+		if server == sentServer {
+			continue
+		}
+		msg.Values = currState.backupValues[server]
+		sendRequest(server, msg)
+		getResponse(server)
+	}
+}
+func sendSilentAbort() {
+	var msg Request
+	msg.Operation = Abort
+	for server := range currState.serverNames {
+		msg.Values = currState.backupValues[server]
+		sendRequest(server, msg)
+		getResponse(server)
 	}
 }
 
