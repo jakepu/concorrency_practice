@@ -98,9 +98,9 @@ func eventLoop(conn net.Conn) {
 		if err != nil {
 			return
 		}
-
+		fmt.Print(req.ClientId, ",", req.Operation, ",", req.Account, "|")
 		resp := handleRequest(req)
-		fmt.Println(resp.Status, resp.Amount)
+		//fmt.Println(resp.Status, resp.Amount)
 		// outgoing, _ := json.Marshal(resp)
 		encoder := json.NewEncoder(conn)
 		err = encoder.Encode(resp)
@@ -125,6 +125,8 @@ func handleRequest(req Request) Response {
 			acct.balance += req.Amount
 		}
 		updateClientLockMap(req.ClientId, acct)
+		fmt.Print(", balance:", acct.balance, ", ")
+		printLock(acct)
 		resp.Status = Success
 	case Balance:
 		acct, found := acctMap[req.Account]
@@ -135,6 +137,8 @@ func handleRequest(req Request) Response {
 			updateClientLockMap(req.ClientId, acct)
 			resp.Status = Success
 			resp.Amount = acct.balance
+			fmt.Print(", balance:", acct.balance, ", ")
+			printLock(acct)
 		}
 	case Withdraw:
 		acct, found := acctMap[req.Account]
@@ -144,9 +148,12 @@ func handleRequest(req Request) Response {
 			requestWL(acct, req.ClientId)
 			updateClientLockMap(req.ClientId, acct)
 			acct.balance -= req.Amount
+			fmt.Print(", balance:", acct.balance, ", ")
+			printLock(acct)
 		}
 	case Commit:
 		releaseAllLock(req.ClientId)
+		delete(clientLockMap, req.ClientId)
 		resp.Status = Success
 	}
 
@@ -154,7 +161,6 @@ func handleRequest(req Request) Response {
 }
 
 func requestRL(acct *account, clientId string) {
-	defer fmt.Println(acct.readLockOwner)
 	for {
 		// check if client already has write lock
 		if acct.writeLockOwner == clientId {
@@ -177,24 +183,25 @@ func requestRL(acct *account, clientId string) {
 }
 
 func requestWL(acct *account, clientId string) {
-	defer fmt.Println(acct.writeLockOwner)
-	// check if client already has write lock
-	if acct.writeLockOwner == clientId {
-		return
-	}
-	// check if there is no writeLock
-	if acct.writeLockOwner == "" {
-		if acct.readLockOwner.Len() == 0 {
-			acct.writeLockOwner = clientId
-			return
-		} else if acct.readLockOwner.Len() == 1 && acct.readLockOwner.Front().Value == clientId {
-			acct.writeLockOwner = clientId
-			acct.readLockOwner.Remove(acct.readLockOwner.Front())
+	for {
+		// check if client already has write lock
+		if acct.writeLockOwner == clientId {
 			return
 		}
+		// check if there is no writeLock
+		if acct.writeLockOwner == "" {
+			if acct.readLockOwner.Len() == 0 {
+				acct.writeLockOwner = clientId
+				return
+			} else if acct.readLockOwner.Len() == 1 && acct.readLockOwner.Front().Value == clientId {
+				acct.writeLockOwner = clientId
+				acct.readLockOwner.Remove(acct.readLockOwner.Front())
+				return
+			}
+		}
+		// wait and sleep 500 ms then check again
+		time.Sleep(time.Millisecond * 500)
 	}
-	// wait and sleep 500 ms then check again
-	time.Sleep(time.Millisecond * 500)
 }
 
 func releaseAllLock(clientId string) {
@@ -211,6 +218,8 @@ func releaseAllLock(clientId string) {
 				return
 			}
 		}
+
+		printLock(v)
 	}
 }
 
@@ -229,4 +238,13 @@ func updateClientLockMap(clientId string, acct *account) {
 	}
 
 	clientLockMap[clientId] = append(l, acct)
+}
+
+func printLock(acct *account) {
+	fmt.Print("lock: ")
+	for e := acct.readLockOwner.Front(); e != nil; e = e.Next() {
+		fmt.Print(e.Value, ",")
+	}
+	fmt.Print("|")
+	fmt.Println(acct.writeLockOwner)
 }
