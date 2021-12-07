@@ -116,9 +116,6 @@ func handleRequest(req Request) Response {
 		} else if acct.established {
 			requestWL(acct, req.ClientId)
 			acct.balance += req.Amount
-			updateClientLockMap(req.ClientId, acct)
-			resp.Status = Success
-			resp.Amount = acct.balance
 		} else {
 			// this account is created by another active txn, we need to wait for the lock to be release to check again if this account is committed or aborted
 			requestWL(acct, req.ClientId)
@@ -130,10 +127,11 @@ func handleRequest(req Request) Response {
 				requestWL(acct, req.ClientId)
 				acct.balance += req.Amount
 			}
-			updateClientLockMap(req.ClientId, acct)
-			resp.Status = Success
-			resp.Amount = acct.balance
 		}
+
+		updateClientLockMap(req.ClientId, acct)
+		resp.Status = Success
+		resp.Amount = acct.balance
 
 		// for debug
 		fmt.Print(", balance:", acct.balance, ", ")
