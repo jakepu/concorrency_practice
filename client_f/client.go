@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var nodeId string
@@ -176,6 +177,7 @@ func processTransactions() {
 			responseChan := make(chan Response)
 			go sendRequestAndGetResponse(serverName, msg, responseChan)
 			// scan next line
+			time.Sleep(200 * time.Microsecond)
 			scanner.Scan()
 			lineBuf = strings.TrimSpace(scanner.Text())
 			switch lineBuf {
@@ -201,6 +203,7 @@ func processTransactions() {
 			responseChan := make(chan Response)
 			go sendRequestAndGetResponse(serverName, msg, responseChan)
 			// scan next line
+			time.Sleep(200 * time.Microsecond)
 			scanner.Scan()
 			lineBuf = strings.TrimSpace(scanner.Text())
 			switch lineBuf {
@@ -227,6 +230,7 @@ func processTransactions() {
 			responseChan := make(chan Response)
 			go sendRequestAndGetResponse(serverName, msg, responseChan)
 			// scan next line
+			time.Sleep(200 * time.Microsecond)
 			scanner.Scan()
 			lineBuf = strings.TrimSpace(scanner.Text())
 			switch lineBuf {
