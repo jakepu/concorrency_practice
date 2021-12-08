@@ -117,13 +117,15 @@ func handleRequest(req Request) Response {
 			acct = &account{balance: req.Amount, writeLockOwner: req.ClientId}
 			acctMap[req.Account] = acct
 		} else if acct.established {
+			// this account has already been commited by previous txn, we can just request appropriate lock and modify the value
 			requestWL(acct, req.ClientId)
 			acct.balance += req.Amount
 		} else {
-			// this account is created by another active txn, we need to wait for the lock to be release to check again if this account is committed or aborted
+			// this account is created by another active txn, we need to wait for the lock to be release, then check again to determine if this account is committed or aborted, then based on the result to execute appropraite action
 			requestWL(acct, req.ClientId)
 			acct, found = acctMap[req.Account]
 			if !found {
+				// the account created by the pervious txn had been removed, create a new one
 				acct = &account{balance: req.Amount, writeLockOwner: req.ClientId}
 				acctMap[req.Account] = acct
 			} else {
@@ -257,17 +259,17 @@ func releaseAllLock(clientId string) {
 	// for debug
 	defer fmt.Println("|lock released")
 
-	l := clientLockMap[clientId]
-	for _, v := range l {
-		if v.writeLockOwner == clientId {
-			v.writeLockOwner = ""
+	acctList := clientLockMap[clientId]
+	for _, acct := range acctList {
+		if acct.writeLockOwner == clientId {
+			acct.writeLockOwner = ""
 			continue
 		}
 
-		for e := v.readLockOwner.Front(); e != nil; e = e.Next() {
+		for e := acct.readLockOwner.Front(); e != nil; e = e.Next() {
 			if e.Value == clientId {
-				v.readLockOwner.Remove(e)
-				return
+				acct.readLockOwner.Remove(e)
+				break
 			}
 		}
 	}
@@ -282,7 +284,7 @@ func updateClientLockMap(clientId string, acct *account) {
 		clientLockMap[clientId] = l
 	}
 
-	// check if the this client already has the lock
+	// check if the this client already has the read/write lock
 	for _, v := range l {
 		if v == acct {
 			return
@@ -320,6 +322,6 @@ func printLock(acct *account) {
 	for e := acct.readLockOwner.Front(); e != nil; e = e.Next() {
 		fmt.Print(e.Value, ",")
 	}
-	fmt.Print(", WL:")
+	fmt.Print(" WL:")
 	fmt.Print(acct.writeLockOwner)
 }
