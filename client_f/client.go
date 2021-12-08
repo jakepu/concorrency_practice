@@ -52,6 +52,9 @@ func getResponse(serverName string) Response {
 func sendRequestAndGetResponse(serverName string, req Request, responseChan chan<- Response) {
 	sendRequest(serverName, req)
 	replyMsg := getResponse(serverName)
+	if replyMsg.Status != Success {
+		hasBegun = false
+	}
 	printResponse(serverName, req, replyMsg)
 	responseChan <- replyMsg
 
@@ -133,7 +136,7 @@ func processTransactions() {
 		var oneLine string
 		if shouldScan {
 			scanner.Scan()
-			oneLine = scanner.Text()
+			oneLine = strings.TrimSpace(scanner.Text())
 		} else {
 			oneLine = lineBuf
 			shouldScan = true
@@ -174,12 +177,14 @@ func processTransactions() {
 			go sendRequestAndGetResponse(serverName, msg, responseChan)
 			// scan next line
 			scanner.Scan()
-			lineBuf = scanner.Text()
+			lineBuf = strings.TrimSpace(scanner.Text())
 			switch lineBuf {
 			case "ABORT":
 				msg.Operation = PreAbort
 				sendRequest(serverName, msg)
-				fmt.Println("ABORTED")
+				if hasBegun {
+					fmt.Println("ABORTED")
+				}
 				shouldScan = true
 			default:
 				shouldScan = false
@@ -197,12 +202,14 @@ func processTransactions() {
 			go sendRequestAndGetResponse(serverName, msg, responseChan)
 			// scan next line
 			scanner.Scan()
-			lineBuf = scanner.Text()
+			lineBuf = strings.TrimSpace(scanner.Text())
 			switch lineBuf {
 			case "ABORT":
 				msg.Operation = PreAbort
 				sendRequest(serverName, msg)
-				fmt.Println("ABORTED")
+				if hasBegun {
+					fmt.Println("ABORTED")
+				}
 				shouldScan = true
 			default:
 				shouldScan = false
@@ -221,12 +228,14 @@ func processTransactions() {
 			go sendRequestAndGetResponse(serverName, msg, responseChan)
 			// scan next line
 			scanner.Scan()
-			lineBuf = scanner.Text()
+			lineBuf = strings.TrimSpace(scanner.Text())
 			switch lineBuf {
 			case "ABORT":
 				msg.Operation = PreAbort
 				sendRequest(serverName, msg)
-				fmt.Println("ABORTED")
+				if hasBegun {
+					fmt.Println("ABORTED")
+				}
 				shouldScan = true
 			default:
 				shouldScan = false
@@ -314,7 +323,7 @@ func configAndConnectServers() {
 
 	for scanner.Scan() {
 		// example: node2 fa21-cs425-g01-02.cs.illinois.edu 1234
-		line := strings.Split(scanner.Text(), " ")
+		line := strings.Split(strings.TrimSpace(scanner.Text()), " ")
 		serverName := line[0]
 		serverAddr := line[1]
 		serverPort := line[2]
