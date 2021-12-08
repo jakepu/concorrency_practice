@@ -136,11 +136,13 @@ func processTransactions() {
 			oneLine = scanner.Text()
 		} else {
 			oneLine = lineBuf
+			shouldScan = true
 		}
 		line := strings.Split(oneLine, " ")
 		operation := line[0]
 		if operation == "BEGIN" {
 			hasBegun = true
+			shouldScan = true
 			fmt.Println("OK")
 			continue
 		}
